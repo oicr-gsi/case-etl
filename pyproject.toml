@@ -1,0 +1,36 @@
+[project]
+name = "case-etl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "dataclasses-json",
+    "requests",
+    "psycopg2-binary",
+    "qc-etl",
+    "pymysql",
+    "prometheus-client",
+]
+
+[project.scripts]
+case-etl = "scripts.case_etl:main"
+
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["./"]
+exclude = ["tests", "build*"]
+
+[tool.uv]
+package = true
+# TODO: qc-etl's crimson dependency requires an older version of urllib3 that is vulnerable
+# remove this once this has been resolved in qc-etl
+override-dependencies = ["urllib3>=2.6.3"]
+
+[tool.uv.sources]
+qc-etl = { git = "https://github.com/oicr-gsi/qc-etl.git", tag = "v1.48" }

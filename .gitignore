@@ -1,0 +1,12 @@
+.idea/
+__pycache__/
+.venv
+*.egg-info/
+build/
+dist/
+.project
+.pydevproject
+
+samples.json
+.DS_Store
+
