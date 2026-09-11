@@ -369,6 +369,8 @@ def _add_analysis_review_data(
     if cache.data.empty:
         print(f"...{source.cache} analysis review metrics SKIPPED due to empty cache")
     else:
+        # exclude samples with collapsed coverage from MISO
+        fd_samples = [x for x in fd_samples if x.collapsed_coverage is None]
         count = 0
         for sample in fd_samples:
             metric = sample.metrics.get("Collapsed Coverage")
