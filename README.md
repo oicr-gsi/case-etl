@@ -235,13 +235,14 @@ uv run pytest
 
 ## Deploy and Release Procedure
 
-1. Run the release script to tag the release
+1. Run the release script to tag the release. Choose the release type based on changes since the
+previous release - patch if bug fixes only, and minor otherwise, unless a major release is planned.
 
 ```
 cd ~/git/case-etl
 git switch main
 git pull
-./release.sh
+./release.sh {major|minor|patch}
 ```
 
 2. Copy the CASE_ETL_VERSION output from the script into your shell
