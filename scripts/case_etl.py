@@ -340,11 +340,11 @@ def add_metrics_from_assay(sample: PreprocessedPinerySample, assay: Preprocessed
     if all_metric_subcategories is None:
         return
     matching_metric_subcategories = [ms for ms in all_metric_subcategories if (
-            # If there's a library design on the metric subcategory, it must match. Otherwise, true if any metrics apply
-            (sample.library_design == ms.library_design) if ms.library_design else
-            (any(True for m in ms.metrics if m.applies(sample, run)))
+            # If there's a library design on the metric subcategory, it must match
+            ms.library_design is None or sample.library_design == ms.library_design
         )]
     for ms in matching_metric_subcategories:
+        required_metrics_by_name: dict[str, SampleMetric] = {}
         for metric in ms.metrics:
             metric_type = MetricType.of(metric.name)
             metric_level = metric_type.metric_level if metric_type else MetricLevel.SAMPLE
@@ -368,8 +368,32 @@ def add_metrics_from_assay(sample: PreprocessedPinerySample, assay: Preprocessed
                     # Include values that come from the sample itself immediately. Others are added later
                     value = get_sample_metric_value(sample, metric.name)
                     sample.metrics[metric.name] = SampleMetric(
-                        name=metric.name, metric_level=metric_level, threshold_type=threshold_type, threshold_min=metric.minimum,
-                        threshold_max=metric.maximum, value=value, units=metric.units)
+                        name=metric.name,
+                        metric_level=metric_level,
+                        threshold_type=threshold_type,
+                        threshold_min=metric.minimum,
+                        threshold_max=metric.maximum,
+                        value=value,
+                        units=metric.units
+                    )
+            elif not metric.optional:
+                if metric.name in required_metrics_by_name:
+                    required_metric = required_metrics_by_name[metric.name]
+                    # units are included, but change to "?" if there's a conflict
+                    if required_metric.units != metric.units:
+                        required_metric.units = '?'
+                else:
+                    required_metrics_by_name[metric.name] = SampleMetric(
+                        name=metric.name,
+                        metric_level=metric_level,
+                        units=metric.units
+                    )
+        for required_metric in required_metrics_by_name.values():
+            if not required_metric.name in sample.metrics:
+                value = get_sample_metric_value(sample, required_metric.name)
+                required_metric.add_sample_value(
+                        get_sample_metric_value(sample, required_metric.name), False)
+                sample.metrics[required_metric.name] = required_metric
 
 
 def get_sample_metric_value(sample: PreprocessedPinerySample, metric_name: str):

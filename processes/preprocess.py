@@ -467,7 +467,8 @@ def preprocess_assays(pinery_assays: List[object]) -> List[PreprocessedAssay]:
                 container_model=pinery_metric.get("container_model"),
                 read_length=pinery_metric.get("read_length"),
                 read_length_2=pinery_metric.get("read_length_2"),
-                threshold_type=ThresholdType.of(pinery_metric["threshold_type"])
+                threshold_type=ThresholdType.of(pinery_metric["threshold_type"]),
+                optional=pinery_metric.get("optional")
             )
             category = pinery_metric["category"]
             if not category in assay.metric_categories:

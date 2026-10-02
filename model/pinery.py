@@ -110,7 +110,7 @@ class ArchivingStatus(Enum):
 class SampleMetric:
     name: str
     metric_level: MetricLevel
-    threshold_type: ThresholdType
+    threshold_type: ThresholdType=None
     run_values: Dict[int, Dict[str, float]] = field(default_factory=dict) # {lane_num: {key: metric, ...}}
     threshold_min: float=None
     threshold_max: float=None
@@ -121,10 +121,13 @@ class SampleMetric:
     has_joined_lanes: bool=False
     finalized: bool=False # only used in qcetl_extract, so may not be marked accurately for some metrics
 
-    def __init__(self, name, metric_level, threshold_type, threshold_min, threshold_max, preliminary: bool=None, value: float=None, qc_passed: bool=None, units: str=None):
+    def __init__(self, name: str, metric_level: MetricLevel, threshold_type: ThresholdType=None,
+            threshold_min: float=None, threshold_max: float=None, preliminary: bool=None,
+            value: float=None, qc_passed: bool=None, units: str=None):
         self.name = name
         self.metric_level = metric_level
-        self.threshold_type = threshold_type if isinstance(threshold_type, ThresholdType) else ThresholdType.of(threshold_type)
+        if threshold_type is not None:
+            self.threshold_type = threshold_type if isinstance(threshold_type, ThresholdType) else ThresholdType.of(threshold_type)
         self.units = units
         self.threshold_min = None if threshold_min is None else float(threshold_min)
         self.threshold_max = None if threshold_max is None else float(threshold_max)
@@ -184,6 +187,8 @@ class SampleMetric:
         self.calculate_qc_passed()
 
     def calculate_qc_passed(self):
+        if self.threshold_type is None:
+            return
         if self.threshold_type == ThresholdType.BOOLEAN:
             # ThresholdType.BOOLEAN metrics should have qc_passed set directly, based on the element's qc_state.
             # Exception: SAMPLE_AUTHENTICATED qc_passed is set in qcetl_extract
@@ -219,7 +224,7 @@ class SampleMetric:
             case ThresholdType.BETWEEN:
                 return t_min <= given_value and given_value <= t_max
             case _:
-                raise ValueError(f"Cannot calculate qc passed for ThresholdType {self.threshold_type.name}")
+                raise ValueError(f"Cannot calculate qc passed for ThresholdType {self.threshold_type}")
             
     def evaluate_qc_passed_for_run_values(self, run_values):
         if not run_values:
@@ -233,7 +238,7 @@ class SampleMetric:
         # explicitly define how to serialize the enums, and omit fields starting with underscore
         return {
             'name': self.name,
-            'threshold_type': self.threshold_type.value,
+            'threshold_type': None if self.threshold_type is None else self.threshold_type.value,
             'threshold_min': self.threshold_min,
             'threshold_max': self.threshold_max,
             'metric_level': self.metric_level.value,
@@ -705,8 +710,9 @@ class PreprocessedMetric:
     read_length: int
     read_length_2: int
     threshold_type: ThresholdType
+    optional: bool
 
-    def __init__(self, name, sort_priority, minimum, maximum, units, tissue_material, tissue_origin, tissue_type, negate_tissue_type, nucleic_acid_type, container_model, read_length, read_length_2, threshold_type):
+    def __init__(self, name, sort_priority, minimum, maximum, units, tissue_material, tissue_origin, tissue_type, negate_tissue_type, nucleic_acid_type, container_model, read_length, read_length_2, threshold_type, optional):
         self.name = name
         self.sort_priority = sort_priority
         self._minimum = None if minimum is None else float(minimum)
@@ -721,6 +727,7 @@ class PreprocessedMetric:
         self.read_length = read_length
         self.read_length_2 = read_length_2
         self.threshold_type = threshold_type if isinstance(threshold_type, ThresholdType) else ThresholdType.of(threshold_type)
+        self.optional = optional
 
     @property
     def minimum(self):
