@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [manifest]
@@ -42,7 +42,7 @@ requires-dist = [
     { name = "prometheus-client" },
     { name = "psycopg2-binary" },
     { name = "pymysql" },
-    { name = "qc-etl", git = "https://github.com/oicr-gsi/qc-etl.git?tag=v1.48" },
+    { name = "qc-etl", git = "https://github.com/oicr-gsi/qc-etl.git?tag=v1.49" },
     { name = "requests" },
 ]
 
@@ -467,8 +467,8 @@ wheels = [
 
 [[package]]
 name = "qc-etl"
-version = "1.48"
-source = { git = "https://github.com/oicr-gsi/qc-etl.git?tag=v1.48#f73693725bf51d3c7b8b2edb2765d12d019e1930" }
+version = "1.49"
+source = { git = "https://github.com/oicr-gsi/qc-etl.git?tag=v1.49#63a3b22b7c78a46b2d7b370de50f27545492abc7" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "crimson" },

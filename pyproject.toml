@@ -33,4 +33,4 @@ package = true
 override-dependencies = ["urllib3>=2.6.3"]
 
 [tool.uv.sources]
-qc-etl = { git = "https://github.com/oicr-gsi/qc-etl.git", tag = "v1.48" }
+qc-etl = { git = "https://github.com/oicr-gsi/qc-etl.git", tag = "v1.49" }
