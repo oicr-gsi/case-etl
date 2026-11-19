@@ -25,7 +25,6 @@ def autoverify_runs(mode: AutoverificationMode, start_date: date,
     signoff_failed_samples = []
     for run in runs_by_id.values():
         # skip incomplete runs and already failed runs
-        # TODO: confirm we don't want run-library signoffs if run is failed
         if not run.completion_date or run.qc_state == _QC_STATE_FAILED:
             continue
         # skip runs completed before the autoverify start date
@@ -89,7 +88,6 @@ def autoverify_runs(mode: AutoverificationMode, start_date: date,
         # sign off run and skip runlibs if run is failing
         if run_metrics_failing:
             signoff_failed_runs.append(run)
-            # TODO: confirm we don't want run-library signoffs if run is failed
             continue
         else:
             # run is passed - apply all signoff decisions
