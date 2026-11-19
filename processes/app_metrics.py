@@ -12,6 +12,8 @@ nabu_archive_errors = Gauge("nabu_archive_errors",
 unconfigured_element = Gauge("unconfigured_element",
         "Number of elements that are not configured in QC-Gate-ETL",
         registry=_registry)
+autoverification_inhibited = Gauge("autoverification_inhibited",
+        "1 if autoverification has been disabled by deleting the enable file; 0 otherwise")
 autoverification_errors = Gauge("autoverification_errors",
         "Number of errors autoverification code encountered",
         registry=_registry)
