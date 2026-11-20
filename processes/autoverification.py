@@ -118,7 +118,7 @@ def _log_all_signoffs(signoff_passed_runs: list[PreprocessedRun],
         signoff_passed_samples: list[PreprocessedPinerySample],
         signoff_topup_samples: list[PreprocessedPinerySample],
         signoff_failed_samples: list[PreprocessedPinerySample]):
-    print("AUTOVERIFICATION_DECISIONS")
+    print("AUTOVERIFICATION DECISIONS")
     _log_signoffs("Passing Runs", [run.name for run in signoff_passed_runs])
     _log_signoffs("Failing Runs", [run.name for run in signoff_failed_runs])
     _log_signoffs("Passing Samples", [sample.oicr_internal_name for sample in signoff_passed_samples])
