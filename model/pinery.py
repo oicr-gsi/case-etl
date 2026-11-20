@@ -114,6 +114,7 @@ class SampleMetric:
     run_values: Dict[int, Dict[str, float]] = field(default_factory=dict) # {lane_num: {key: metric, ...}}
     threshold_min: float=None
     threshold_max: float=None
+    top_up: bool=False
     preliminary: bool=None
     _value: float=None
     qc_passed: bool=None
@@ -122,8 +123,8 @@ class SampleMetric:
     finalized: bool=False # only used in qcetl_extract, so may not be marked accurately for some metrics
 
     def __init__(self, name: str, metric_level: MetricLevel, threshold_type: ThresholdType=None,
-            threshold_min: float=None, threshold_max: float=None, preliminary: bool=None,
-            value: float=None, qc_passed: bool=None, units: str=None):
+            threshold_min: float=None, threshold_max: float=None, top_up: bool=False,
+            preliminary: bool=None, value: float=None, qc_passed: bool=None, units: str=None):
         self.name = name
         self.metric_level = metric_level
         if threshold_type is not None:
@@ -131,6 +132,7 @@ class SampleMetric:
         self.units = units
         self.threshold_min = None if threshold_min is None else float(threshold_min)
         self.threshold_max = None if threshold_max is None else float(threshold_max)
+        self.top_up = top_up
         self.preliminary = preliminary
         self._value = None if value is None else float(value)
         self.run_values = None
@@ -711,8 +713,11 @@ class PreprocessedMetric:
     read_length_2: int
     threshold_type: ThresholdType
     optional: bool
+    top_up: bool
 
-    def __init__(self, name, sort_priority, minimum, maximum, units, tissue_material, tissue_origin, tissue_type, negate_tissue_type, nucleic_acid_type, container_model, read_length, read_length_2, threshold_type, optional):
+    def __init__(self, name, sort_priority, minimum, maximum, units, tissue_material,
+            tissue_origin, tissue_type, negate_tissue_type, nucleic_acid_type, container_model,
+            read_length, read_length_2, threshold_type, optional, top_up):
         self.name = name
         self.sort_priority = sort_priority
         self._minimum = None if minimum is None else float(minimum)
@@ -728,6 +733,7 @@ class PreprocessedMetric:
         self.read_length_2 = read_length_2
         self.threshold_type = threshold_type if isinstance(threshold_type, ThresholdType) else ThresholdType.of(threshold_type)
         self.optional = optional
+        self.top_up = top_up
 
     @property
     def minimum(self):

@@ -13,6 +13,7 @@ from model.pinery import (ArchivingStatus, MetricLevel, MetricType, Preprocessed
         PreprocessedProject, PreprocessedProjectDeliverable, PreprocessedRelease, PreprocessedRun,
         PreprocessedRequisition, PreprocessedAnalysisQcGroup, RequiredCase, SampleMetric,
         SampleType, PreprocessedPinerySample, QcableType, ThresholdType, clone_id_pattern)
+from processes.autoverification import AutoverificationMode, autoverify_runs
 from processes.nabu_extract import RetentionUnits
 from processes.qcetl_extract import add_qcetl_data
 from processes.pinery_extract import get_pinery_samples
@@ -373,6 +374,7 @@ def add_metrics_from_assay(sample: PreprocessedPinerySample, assay: Preprocessed
                         threshold_type=threshold_type,
                         threshold_min=metric.minimum,
                         threshold_max=metric.maximum,
+                        top_up=metric.top_up,
                         value=value,
                         units=metric.units
                     )
@@ -680,7 +682,7 @@ argparser.add_argument('--prometheus-url',
                        help='Prometheus Pushgateway URL for metrics')
 argparser.add_argument('--environment',
                        choices=["production", "staging", "development"],
-                       help='Environment label for metrics (production/staging/development)')
+                       help='Environment label for metrics')
 argparser.add_argument("--data-output-dir",
                        required=True,
                        help="Write data to this directory")
@@ -689,6 +691,15 @@ argparser.add_argument("--tat-exemptions-file",
 argparser.add_argument("--explain-tat-case",
                        action="append",
                        help="Print a breakdown of TAT calculation for the specified case")
+argparser.add_argument("--autoverify-mode",
+                       type=AutoverificationMode,
+                       choices=list(AutoverificationMode),
+                       default=AutoverificationMode.DISABLED,
+                       help="Automatically mark QC for runs and run-libraries")
+argparser.add_argument("--autoverify-start-date",
+                       type=date.fromisoformat,
+                       help="Autoverification will not mark QC on any sequencing completed before this date (YYYY-MM-DD)")
+
 args = argparser.parse_args()
 pinery_url = args.pinery_url
 miso_db_config = args.miso_db_config
@@ -702,6 +713,8 @@ qcetl_metrics_file = args.qcetl_metrics_file
 qcetl_dirs = args.qcetl_dir
 tat_exempt_dates = read_tat_exemptions(args.tat_exemptions_file) if args.tat_exemptions_file else []
 explain_tat_case_ids = args.explain_tat_case or []
+autoverification_mode = args.autoverify_mode
+autoverification_start_date = args.autoverify_start_date
 
 if prometheus_url and not environment:
     argparser.error("--environment is required when specifying --prometheus-url")
@@ -900,6 +913,13 @@ for case in output_cases:
     calculate_turnaround_times(case, tat_exempt_dates, preprocessed_runs_by_id,
             explain=case.get_case_id() in explain_tat_case_ids)
 print(f"Completed TAT calculation in {timeit.default_timer() - start_time:.1f}s")
+
+if autoverification_mode != AutoverificationMode.DISABLED:
+    start_time = timeit.default_timer()
+    autoverify_runs(autoverification_mode, autoverification_start_date, preprocessed_runs_by_id,
+            sample_ids_by_run, output_samples_by_id)
+    print(f"Completed autoverification in {timeit.default_timer() - start_time:.1f}s")
+    
 
 start_time = timeit.default_timer()
 write_timestamp(data_output_directory, 'WORKING')
