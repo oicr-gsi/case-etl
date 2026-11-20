@@ -699,6 +699,8 @@ argparser.add_argument("--autoverify-mode",
 argparser.add_argument("--autoverify-start-date",
                        type=date.fromisoformat,
                        help="Autoverification will not mark QC on any sequencing completed before this date (YYYY-MM-DD)")
+argparser.add_argument("--autoverify-enable-file",
+                       help="This file must exist for autoverification to proceed. Required if autoverification-mode is 'enabled'")
 
 args = argparser.parse_args()
 pinery_url = args.pinery_url
@@ -715,6 +717,7 @@ tat_exempt_dates = read_tat_exemptions(args.tat_exemptions_file) if args.tat_exe
 explain_tat_case_ids = args.explain_tat_case or []
 autoverification_mode = args.autoverify_mode
 autoverification_start_date = args.autoverify_start_date
+autoverification_enable_file = args.autoverify_enable_file
 
 if prometheus_url and not environment:
     argparser.error("--environment is required when specifying --prometheus-url")
@@ -729,6 +732,9 @@ if nabu_url:
 
 if qcetl_metrics_file and not qcetl_dirs:
     argparser.error("--qcetl-dir is required when specifying --qcetl-metrics-file")
+
+if autoverification_mode == AutoverificationMode.ENABLED and not autoverification_enable_file:
+    argparser.error("--autoverify-enable-file is required when --autoverify-mode is 'enabled'")
 
 os.makedirs(data_output_directory, exist_ok=True)
 
@@ -915,10 +921,15 @@ for case in output_cases:
 print(f"Completed TAT calculation in {timeit.default_timer() - start_time:.1f}s")
 
 if autoverification_mode != AutoverificationMode.DISABLED:
-    start_time = timeit.default_timer()
-    autoverify_runs(autoverification_mode, autoverification_start_date, preprocessed_runs_by_id,
-            sample_ids_by_run, output_samples_by_id)
-    print(f"Completed autoverification in {timeit.default_timer() - start_time:.1f}s")
+    if autoverification_enable_file and not os.path.isfile(autoverification_enable_file):
+        app_metrics.autoverification_inhibited.set(1)
+        print(f"AUTOVERIFICATION ABORTED due to missing enable file: {autoverification_enable_file}")
+    else:
+        app_metrics.autoverification_inhibited.set(0)
+        start_time = timeit.default_timer()
+        autoverify_runs(autoverification_mode, autoverification_start_date, preprocessed_runs_by_id,
+                sample_ids_by_run, output_samples_by_id)
+        print(f"Completed autoverification in {timeit.default_timer() - start_time:.1f}s")
     
 
 start_time = timeit.default_timer()

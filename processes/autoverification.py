@@ -10,6 +10,7 @@ _QC_STATE_PASSED = "Ready"
 class AutoverificationMode(StrEnum):
     DISABLED = "disabled"
     DRY_RUN = "dry-run"
+    ENABLED = "enabled"
 
 
 def autoverify_runs(mode: AutoverificationMode, start_date: date,
@@ -109,6 +110,7 @@ def _process_signoffs(mode: AutoverificationMode, signoff_passed_runs: list[Prep
             _log_all_signoffs(signoff_passed_runs, signoff_failed_runs, signoff_passed_samples,
                     signoff_topup_samples, signoff_failed_samples)
         case _:
+            # enabled mode not yet implemented
             # if disabled, we shouldn't havee gotten this far
             raise ValueError(f"Unexpected Autoverification mode: {mode}")
 
