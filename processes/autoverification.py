@@ -28,13 +28,13 @@ def autoverify_runs(mode: AutoverificationMode, start_date: date,
     if mode == AutoverificationMode.DISABLED:
         return
     print("Beginning autoverification")
-    decisions = _make_decisions(mode, start_date, runs_by_id, sample_ids_by_run, samples_by_id)
-    _process_signoffs(mode, decisions)
+    decisions = _make_decisions(start_date, runs_by_id, sample_ids_by_run, samples_by_id)
+    _process_signoffs(mode, decisions, runs_by_id)
 
 
-def _make_decisions(mode: AutoverificationMode, start_date: date,
-        runs_by_id: dict[int, PreprocessedRun], sample_ids_by_run: dict[int, set[str]],
-        samples_by_id: dict[str, PreprocessedPinerySample]) -> Decisions:
+def _make_decisions(start_date: date, runs_by_id: dict[int, PreprocessedRun],
+        sample_ids_by_run: dict[int, set[str]], samples_by_id: dict[str, PreprocessedPinerySample]
+        ) -> Decisions:
     decisions = Decisions()
     for run in runs_by_id.values():
         # skip incomplete runs and already failed runs
@@ -47,9 +47,6 @@ def _make_decisions(mode: AutoverificationMode, start_date: date,
         # skip runs with no samples
         if not sample_ids:
             continue
-
-        if mode == AutoverificationMode.DRY_RUN:
-            print(f"...checking run {run.name}")
 
         run_signoff_needed = run.qc_state == _QC_STATE_PENDING
         run_metrics_available = False
@@ -119,27 +116,53 @@ def _make_decisions(mode: AutoverificationMode, start_date: date,
     return decisions
 
 
-def _process_signoffs(mode: AutoverificationMode, decisions: Decisions):
+def _process_signoffs(mode: AutoverificationMode, decisions: Decisions,
+        runs_by_id: dict[int, PreprocessedRun]):
     match mode:
         case AutoverificationMode.DRY_RUN:
-            _log_all_signoffs(decisions)
+            _log_all_signoffs(decisions, runs_by_id)
         case _:
             # enabled mode not yet implemented
             # if disabled, we shouldn't havee gotten this far
             raise ValueError(f"Unexpected Autoverification mode: {mode}")
 
 
-def _log_all_signoffs(decisions: Decisions):
+def _log_all_signoffs(decisions: Decisions, runs_by_id: dict[int, PreprocessedRun]):
     print("AUTOVERIFICATION DECISIONS")
-    _log_signoffs("Passing Runs", [run.name for run in decisions.passed_runs])
-    _log_signoffs("Failing Runs", [run.name for run in decisions.failed_runs])
-    _log_signoffs("Passing Samples", [sample.oicr_internal_name for sample in decisions.passed_samples])
-    _log_signoffs("Top-up Samples", [sample.oicr_internal_name for sample in decisions.topup_samples])
-    _log_signoffs("Failing Samples", [sample.oicr_internal_name for sample in decisions.failed_samples])
+    signoffs_by_run_id = {}
+    _organize_runs(signoffs_by_run_id, decisions.passed_runs, "Pass")
+    _organize_runs(signoffs_by_run_id, decisions.failed_runs, "Fail")
+    _organize_samples(signoffs_by_run_id, decisions.passed_samples, "Pass", runs_by_id)
+    _organize_samples(signoffs_by_run_id, decisions.topup_samples, "Top-Up", runs_by_id)
+    _organize_samples(signoffs_by_run_id, decisions.failed_samples, "Fail", runs_by_id)
 
+    for signoffs in signoffs_by_run_id.values():
+        print(f"* {signoffs['run'].name}")
+        if signoffs['status']:
+            print(f"  * Run: {signoffs['status']}")
+        for sample_signoff in sorted(signoffs['samples'], key=lambda x: x['sample'].oicr_internal_name):
+            sample = sample_signoff['sample']
+            print(f"  * Sample {sample.oicr_internal_name} (L{sample.sequencing_lane}): {sample_signoff["status"]}")
 
-def _log_signoffs(message: str, item_names: list[str]):
-    print(f"* {message}:{' (none)' if not item_names else ''}")
-    if item_names:
-        for item_name in item_names:
-            print(f"  * {item_name}")
+def _organize_runs(signoffs_by_run_id: dict[int, dict], runs: list[PreprocessedRun], status: str):
+    for run in runs:
+        signoffs_by_run_id[run.id] = {
+            "run": run,
+            "status": status,
+            "samples": []
+        }
+
+def _organize_samples(signoffs_by_run_id: dict[int, dict], samples: list[PreprocessedPinerySample],
+        status: str, runs_by_id: dict[int, PreprocessedRun]):
+    for sample in samples:
+        if not sample.sequencing_run_id in signoffs_by_run_id:
+            run = runs_by_id[sample.sequencing_run_id]
+            signoffs_by_run_id[sample.sequencing_run_id] = {
+                "run": run,
+                "status": None,
+                "samples": []
+            }
+        signoffs_by_run_id[sample.sequencing_run_id]['samples'].append({
+            "sample": sample,
+            "status": status
+        })

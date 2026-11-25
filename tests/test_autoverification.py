@@ -353,7 +353,7 @@ def get_decisions(run: PreprocessedRun, samples: list[PreprocessedPinerySample])
             sample_ids_by_run[sample.sequencing_run_id] = set()
         sample_ids_by_run[sample.sequencing_run_id].add(sample.sample_id)
         samples_by_id[sample.sample_id] = sample
-    return _make_decisions(None, START_DATE, runs_by_id, sample_ids_by_run, samples_by_id)
+    return _make_decisions(START_DATE, runs_by_id, sample_ids_by_run, samples_by_id)
 
 def make_run(run_id: int) -> PreprocessedRun:
     return PreprocessedRun(
