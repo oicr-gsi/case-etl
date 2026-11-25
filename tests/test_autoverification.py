@@ -147,6 +147,23 @@ def test_pre_passed_sample_failing_metrics():
     assert len(decisions.failed_samples) == 0
     assert len(decisions.topup_samples) == 0
 
+def test_pre_topup_marked_sample():
+    # skip anything already signed off, including "Top-up Required"
+    run = make_run(1)
+    run.qc_state = "Ready"
+    sample = make_sample(1, 1, 1)
+    sample.qc_state = "Not Ready"
+    sample.qc_reason = "Top-up Required"
+    add_metric(sample, 1, MetricLevel.RUN, True)
+    add_metric(sample, 2, MetricLevel.SAMPLE, True)
+
+    decisions = get_decisions(run, [sample])
+    assert len(decisions.passed_runs) == 0
+    assert len(decisions.failed_runs) == 0
+    assert len(decisions.passed_samples) == 0
+    assert len(decisions.failed_samples) == 0
+    assert len(decisions.topup_samples) == 0
+
 def test_passing_run_passing_sample():
     run = make_run(1)
     sample = make_sample(1, 1, 1)
@@ -408,7 +425,7 @@ def make_sample(run_id: int, lane_number: int, sample_number: int) -> Preprocess
         sequencing_run_id=run_id,
         sequencing_lane=lane_number,
         qc_state="Not Ready",
-        qc_reason=None,
+        qc_reason="Not Ready",
         qc_note=None,
         qc_user=None,
         qc_date=None,

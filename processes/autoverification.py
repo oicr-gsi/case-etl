@@ -60,7 +60,9 @@ def _make_decisions(start_date: date, runs_by_id: dict[int, PreprocessedRun],
             # skip samples with no metrics
             if not sample.metrics:
                 continue
-            sample_signoff_needed = sample.qc_state == _QC_STATE_PENDING
+            # need to check qc_reason too in-case of top-up
+            sample_signoff_needed = (sample.qc_state == _QC_STATE_PENDING
+                    and sample.qc_reason == _QC_STATE_PENDING)
             # skip if neither sample nor run needs signoff
             if not sample_signoff_needed and not run_signoff_needed:
                 continue
