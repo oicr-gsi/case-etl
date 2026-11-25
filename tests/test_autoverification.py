@@ -259,6 +259,20 @@ def test_sample_no_metrics():
     assert len(decisions.failed_samples) == 0
     assert len(decisions.topup_samples) == 0
 
+def test_sample_no_run_metrics():
+    # never sign off a SAMPLE that has no RUN metrics either
+    run = make_run(1)
+    run.qc_state = "Ready"
+    sample = make_sample(1, 1, 1)
+    add_metric(sample, 1, MetricLevel.SAMPLE, True)
+
+    decisions = get_decisions(run, [sample])
+    assert len(decisions.passed_runs) == 0
+    assert len(decisions.failed_runs) == 0
+    assert len(decisions.passed_samples) == 0
+    assert len(decisions.failed_samples) == 0
+    assert len(decisions.topup_samples) == 0
+
 def test_sample_missing_metric_value():
     # never sign off if a metric value is missing
     run = make_run(1)
