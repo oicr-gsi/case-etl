@@ -8,17 +8,18 @@ import timeit
 
 from datetime import date, datetime, timezone, timedelta
 from dateutil.relativedelta import relativedelta
-from model.pinery import (ArchivingStatus, MetricLevel, MetricType, PreprocessedAssay,
-        PreprocessedAssayTest, PreprocessedCase, PreprocessedDeliverable, PreprocessedDonor,
-        PreprocessedProject, PreprocessedProjectDeliverable, PreprocessedRelease, PreprocessedRun,
-        PreprocessedRequisition, PreprocessedAnalysisQcGroup, RequiredCase, SampleMetric,
-        SampleType, PreprocessedPinerySample, QcableType, ThresholdType, clone_id_pattern)
+from model.pinery import (ArchivingStatus, PreprocessedAssay, PreprocessedAssayTest,
+        PreprocessedCase, PreprocessedDeliverable, PreprocessedDonor, PreprocessedProject,
+        PreprocessedProjectDeliverable, PreprocessedRelease, PreprocessedRun,
+        PreprocessedRequisition, PreprocessedAnalysisQcGroup, RequiredCase, SampleType,
+        PreprocessedPinerySample, QcableType, clone_id_pattern)
 from processes.autoverification import AutoverificationMode, autoverify_runs
 from processes.nabu_extract import RetentionUnits
 from processes.qcetl_extract import add_qcetl_data
 from processes.pinery_extract import get_pinery_samples
 from processes.preprocess import (preprocess_assays, preprocess_requisitions, preprocess_runs,
         preprocess_samples)
+from processes.sample_metrics import add_metrics_from_assay, add_sample_field_metrics
 from typing import Dict, List, Set
 from processes.miso_db_extract import add_runscanner_data, add_transfer_data, connect_db
 from processes.turnaround_time import calculate_turnaround_times, date_range_inclusive, parse_date
@@ -224,6 +225,8 @@ def add_case_sample(case: PreprocessedCase, sample: PreprocessedPinerySample, su
     if sample.qcable_type == QcableType.RECEIPT_INSPECTION:
         if not sample in case.receipts:
             case.receipts.append(sample)
+        if not supplemental:
+            add_sample_field_metrics(sample, output_assays_by_id.get(case.assay_id))
     else:
         inclusion_count = 0
         for test in case.assay_tests:
@@ -264,8 +267,12 @@ def add_case_sample(case: PreprocessedCase, sample: PreprocessedPinerySample, su
                 inclusion_count += 1
                 if sample.qcable_type == QcableType.EXTRACTION:
                     test.extractions.append(sample)
+                    if not supplemental:
+                        add_sample_field_metrics(sample, output_assays_by_id.get(case.assay_id))
                 elif sample.qcable_type == QcableType.LIBRARY_PREPARATION:
                     test.library_preparations.append(sample)
+                    if not supplemental:
+                        add_sample_field_metrics(sample, output_assays_by_id.get(case.assay_id))
                 elif sample.qcable_type == QcableType.LIBRARY_QUALIFICATION:
                     test.library_qualifications.append(sample)
                     if not supplemental:
@@ -334,82 +341,6 @@ def get_identity(preprocessed_sample: PreprocessedPinerySample) -> PreprocessedP
         return preprocessed_sample_parent
     else:
         return get_identity(preprocessed_sample_parent)
-
-
-def add_metrics_from_assay(sample: PreprocessedPinerySample, assay: PreprocessedAssay, metric_category: QcableType, run: PreprocessedRun):
-    all_metric_subcategories = assay.metric_categories[metric_category.name] if metric_category.name in assay.metric_categories else None
-    if all_metric_subcategories is None:
-        return
-    matching_metric_subcategories = [ms for ms in all_metric_subcategories if (
-            # If there's a library design on the metric subcategory, it must match
-            ms.library_design is None or sample.library_design == ms.library_design
-        )]
-    for ms in matching_metric_subcategories:
-        required_metrics_by_name: dict[str, SampleMetric] = {}
-        for metric in ms.metrics:
-            metric_type = MetricType.of(metric.name)
-            metric_level = metric_type.metric_level if metric_type else MetricLevel.SAMPLE
-            threshold_type = ThresholdType(metric.threshold_type)  # Will raise if it encounters a threshold type that is not yet configured
-
-            if metric.applies(sample, run):
-                # Add metric to sample
-                if metric.name in sample.metrics:
-                    # Error only if the metric thresholds are different from what's already on the sample.
-                    # A reference sample in the same requisition as multiple tumour samples at different timepoints will be included in multiple cases, and shouldn't error.
-                    existing_metric = sample.metrics[metric.name]
-                    if metric.matches_thresholds(existing_metric.name, existing_metric.threshold_min, existing_metric.threshold_max, existing_metric.threshold_type):
-                        continue
-                    else:
-                        raise Exception(f"""Attempted to add duplicate metric {metric.name} to {sample.sample_id} with different thresholds.
-    Check if:
-        - the requisition for sample {sample.sample_id} has multiple assays with different thresholds (ask the lab to fix the req to only have one assay)
-        - assay {assay.id} has duplicate metrics for the assay test that the sample is involved with
-        - there's a problem with the PreprocessedMetric.matches_thresholds functions.""")
-                else:
-                    # Include values that come from the sample itself immediately. Others are added later
-                    value = get_sample_metric_value(sample, metric.name)
-                    sample.metrics[metric.name] = SampleMetric(
-                        name=metric.name,
-                        metric_level=metric_level,
-                        threshold_type=threshold_type,
-                        threshold_min=metric.minimum,
-                        threshold_max=metric.maximum,
-                        top_up=metric.top_up,
-                        value=value,
-                        units=metric.units
-                    )
-            elif not metric.optional:
-                if metric.name in required_metrics_by_name:
-                    required_metric = required_metrics_by_name[metric.name]
-                    # units are included, but change to "?" if there's a conflict
-                    if required_metric.units != metric.units:
-                        required_metric.units = '?'
-                else:
-                    required_metrics_by_name[metric.name] = SampleMetric(
-                        name=metric.name,
-                        metric_level=metric_level,
-                        units=metric.units
-                    )
-        for required_metric in required_metrics_by_name.values():
-            if not required_metric.name in sample.metrics:
-                value = get_sample_metric_value(sample, required_metric.name)
-                required_metric.add_sample_value(
-                        get_sample_metric_value(sample, required_metric.name), False)
-                sample.metrics[required_metric.name] = required_metric
-
-
-def get_sample_metric_value(sample: PreprocessedPinerySample, metric_name: str):
-    match metric_name:
-        case None:
-            return None
-        case "Collapsed Coverage":
-            return sample.collapsed_coverage
-        case "Quantitative PCR (qPCR)":
-            return sample.concentration
-        case "Tumour Content":
-            return sample.tumour_content
-        case _:
-            return None
 
 
 def get_qcable_id(sample: PreprocessedPinerySample):
@@ -873,6 +804,9 @@ for case in output_cases:
                 receipt.assay_ids.add(assay_id)
                 for child in children:
                     child.assay_ids.add(assay_id)
+                assay = output_assays_by_id.get(assay_id)
+                for sample in [receipt] + children:
+                    add_sample_field_metrics(sample, assay)
 
 omitted_samples = [x for x in preprocessed_samples.values()
         if x.qcable_type == QcableType.RECEIPT_INSPECTION
