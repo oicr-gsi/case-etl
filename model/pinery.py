@@ -139,7 +139,7 @@ class SampleMetric:
         if qc_passed is not None:
             self.qc_passed = qc_passed
         else:
-            self.calculate_qc_passed()
+            self._calculate_qc_passed()
 
     @property
     def value(self):
@@ -148,9 +148,9 @@ class SampleMetric:
     @value.setter
     def value(self, value):
         self._value = None if value is None else float(value)
-        self.calculate_qc_passed()
+        self._calculate_qc_passed()
 
-    def unit_aware_threshold_value(self, val: float) -> float:
+    def _unit_aware_threshold_value(self, val: float) -> float:
         """Return a units-aware threhold value"""
         if val is None:
             return None
@@ -173,22 +173,24 @@ class SampleMetric:
         
         return float(val * multiplier)
     
-    def add_sample_value(self, metric_value: float, preliminary: bool):
+    def add_sample_value(self, metric_value: float, preliminary: bool=False):
         self.preliminary = preliminary
         self.value = metric_value  # setting this calls calculate_qc_passed()
 
-    def add_run_values(self, value: float, run_values: Dict[str, float], has_joined_lanes: bool):
+    def add_run_values(self, value: float, run_values: dict[int, dict[str, float]], has_joined_lanes: bool):
         self.has_joined_lanes = has_joined_lanes
         if run_values is not None:
             run_value_floats = deepcopy(run_values)
             for k, inner in run_value_floats.items():
                 for ik, v in inner.items():
+                    if ik not in [None, "R1", "R2"]:
+                        raise ValueError(f"Invalid sub-lane level specified in metric run_values: {ik} (must be None, 'R1', or 'R2')")
                     run_value_floats[k][ik] = None if v is None else float(v)
             self.run_values = run_value_floats
         self.value = value
-        self.calculate_qc_passed()
+        self._calculate_qc_passed()
 
-    def calculate_qc_passed(self):
+    def _calculate_qc_passed(self):
         if self.threshold_type is None:
             return
         if self.threshold_type == ThresholdType.BOOLEAN:
@@ -200,20 +202,20 @@ class SampleMetric:
                 raise ValueError(f"Cannot evaluate per-lane units {self.units} for metric {MetricType.MIN_CLUSTERS_PF.metric_label} on joined lanes run")
             else:
                 # the lack of "/lane" in the units means it should be evaluated at the run level
-                self.qc_passed = self.evaluate_qc_passed_for_value(self.value)
+                self.qc_passed = self._evaluate_qc_passed_for_value(self.value)
                 return
         elif self.metric_level == MetricLevel.LANE:
-            self.qc_passed = self.evaluate_qc_passed_for_run_values(self.run_values)
+            self.qc_passed = self._evaluate_qc_passed_for_run_values(self.run_values)
             return
         else:
-            self.qc_passed = self.evaluate_qc_passed_for_value(self.value)
+            self.qc_passed = self._evaluate_qc_passed_for_value(self.value)
             return
     
-    def evaluate_qc_passed_for_value(self, given_value):
+    def _evaluate_qc_passed_for_value(self, given_value):
         if given_value is None:
             return None
-        t_min = self.unit_aware_threshold_value(self.threshold_min)
-        t_max = self.unit_aware_threshold_value(self.threshold_max)
+        t_min = self._unit_aware_threshold_value(self.threshold_min)
+        t_max = self._unit_aware_threshold_value(self.threshold_max)
         match self.threshold_type:
             case ThresholdType.GE:
                 return given_value >= t_min
@@ -228,11 +230,11 @@ class SampleMetric:
             case _:
                 raise ValueError(f"Cannot calculate qc passed for ThresholdType {self.threshold_type}")
             
-    def evaluate_qc_passed_for_run_values(self, run_values):
+    def _evaluate_qc_passed_for_run_values(self, run_values):
         if not run_values:
             return None
         for lane_values in run_values.values():
-            if not all(self.evaluate_qc_passed_for_value(value) for value in lane_values.values() if value is not None):
+            if not all(self._evaluate_qc_passed_for_value(value) for value in lane_values.values() if value is not None):
                 return False
         return True
 
