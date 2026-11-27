@@ -1,6 +1,20 @@
 from datetime import date
+from unittest.mock import patch
 from model.pinery import MetricLevel, PreprocessedPinerySample, PreprocessedRun, QcableType, SampleMetric, ThresholdType
-from processes.autoverification import Decisions, _make_decisions
+from processes.autoverification import AutoverificationMode, Decisions, _make_decisions, autoverify_runs
+
+
+def test_abort_if_disabled():
+    run = make_run(1)
+    sample = make_sample(1, 1, 1)
+    add_metric(sample, 1, MetricLevel.RUN, True)
+    add_metric(sample, 2, MetricLevel.SAMPLE, True)
+    runs_by_id, sample_ids_by_run, samples_by_id = arrange_run_and_samples(run, [sample])
+
+    with patch("processes.autoverification._process_signoffs") as mock_process:        
+        autoverify_runs(AutoverificationMode.DISABLED, START_DATE, runs_by_id, sample_ids_by_run,
+                samples_by_id)
+        mock_process.assert_not_called()
 
 """
 Note: There is no need to test all of the different metric types in here because
@@ -19,6 +33,21 @@ To include that one incomplete/failing item causes the expected status:
 START_DATE_STRING="2026-11-23"
 START_DATE = date.fromisoformat(START_DATE_STRING)
 
+
+def test_run_incomplete():
+    # skip runs completed before the autoverify start date
+    run = make_run(1)
+    run.completion_date = None
+    sample = make_sample(1, 1, 1)
+    add_metric(sample, 1, MetricLevel.RUN, True)
+    add_metric(sample, 2, MetricLevel.SAMPLE, True)
+
+    decisions = get_decisions(run, [sample])
+    assert len(decisions.passed_runs) == 0
+    assert len(decisions.failed_runs) == 0
+    assert len(decisions.passed_samples) == 0
+    assert len(decisions.failed_samples) == 0
+    assert len(decisions.topup_samples) == 0
 
 def test_run_before_start_date():
     # skip runs completed before the autoverify start date
@@ -60,7 +89,7 @@ def test_run_no_metrics():
     assert len(decisions.failed_samples) == 0
     assert len(decisions.topup_samples) == 0
 
-def test_run_no_metrics_on_one_sample():
+def test_run_no_metrics_on_some_samples():
     # as long as one sample provides run metrics, run signoff can proceed
     # however, a sample that is missing run metrics should not be signed off
     run = make_run(1)
@@ -69,8 +98,9 @@ def test_run_no_metrics_on_one_sample():
     add_metric(sample1, 2, MetricLevel.SAMPLE, True)
     sample2 = make_sample(1, 1, 2)
     add_metric(sample2, 1, MetricLevel.SAMPLE, True)
+    sample3 = make_sample(1, 1, 3)
 
-    decisions = get_decisions(run, [sample1, sample2])
+    decisions = get_decisions(run, [sample1, sample2, sample3])
     assert len(decisions.passed_runs) == 1
     assert run in decisions.passed_runs
     assert len(decisions.failed_runs) == 0
@@ -79,8 +109,21 @@ def test_run_no_metrics_on_one_sample():
     assert len(decisions.failed_samples) == 0
     assert len(decisions.topup_samples) == 0
 
+def test_run_no_metrics_at_all():
+    # never sign off if there are no metrics for the item
+    run = make_run(1)
+    sample = make_sample(1, 1, 1)
+
+    decisions = get_decisions(run, [sample])
+    assert len(decisions.passed_runs) == 0
+    assert len(decisions.failed_runs) == 0
+    assert len(decisions.passed_samples) == 0
+    assert len(decisions.failed_samples) == 0
+    assert len(decisions.topup_samples) == 0
+
 def test_run_missing_metric_value():
     # never sign off if a metric value is missing
+    # never sign off samples with any status if the run isn't ready for signoff
     run = make_run(1)
     sample1 = make_sample(1, 1, 1)
     add_metric(sample1, 1, MetricLevel.RUN, True)
@@ -89,6 +132,12 @@ def test_run_missing_metric_value():
     sample2 = make_sample(1, 1, 2)
     add_metric(sample2, 1, MetricLevel.RUN, True)
     add_metric(sample2, 2, MetricLevel.SAMPLE, True)
+    sample3 = make_sample(1, 1, 3)
+    add_metric(sample3, 1, MetricLevel.RUN, True)
+    add_metric(sample3, 2, MetricLevel.SAMPLE, False, top_up=True)
+    sample4 = make_sample(1, 1, 4)
+    add_metric(sample4, 1, MetricLevel.RUN, True)
+    add_metric(sample4, 2, MetricLevel.SAMPLE, False)
 
     decisions = get_decisions(run, [sample1, sample2])
     assert len(decisions.passed_runs) == 0
@@ -375,6 +424,10 @@ def test_preliminary_failing_metric():
 
     
 def get_decisions(run: PreprocessedRun, samples: list[PreprocessedPinerySample]) -> Decisions:
+    runs_by_id, sample_ids_by_run, samples_by_id = arrange_run_and_samples(run, samples)
+    return _make_decisions(START_DATE, runs_by_id, sample_ids_by_run, samples_by_id)
+
+def arrange_run_and_samples(run: PreprocessedRun, samples: list[PreprocessedPinerySample]):
     runs_by_id = {run.id: run}
     sample_ids_by_run: dict[int, set[PreprocessedPinerySample]] = {}
     samples_by_id = {}
@@ -384,7 +437,7 @@ def get_decisions(run: PreprocessedRun, samples: list[PreprocessedPinerySample])
             sample_ids_by_run[sample.sequencing_run_id] = set()
         sample_ids_by_run[sample.sequencing_run_id].add(sample.sample_id)
         samples_by_id[sample.sample_id] = sample
-    return _make_decisions(START_DATE, runs_by_id, sample_ids_by_run, samples_by_id)
+    return runs_by_id, sample_ids_by_run, samples_by_id
 
 def make_run(run_id: int) -> PreprocessedRun:
     return PreprocessedRun(
