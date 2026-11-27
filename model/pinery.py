@@ -37,6 +37,16 @@ class QcableType(Enum):
         raise RuntimeError("Unexpected indexing error")
 
 
+# Pinery assay metric categories use the MISO names, which differ from QcableType for some gates
+ASSAY_METRIC_CATEGORY_BY_QCABLE_TYPE = {
+    QcableType.RECEIPT_INSPECTION: "RECEIPT",
+    QcableType.EXTRACTION: "EXTRACTION",
+    QcableType.LIBRARY_PREPARATION: "LIBRARY_PREP",
+    QcableType.LIBRARY_QUALIFICATION: "LIBRARY_QUALIFICATION",
+    QcableType.FULL_DEPTH_SEQUENCING: "FULL_DEPTH_SEQUENCING",
+}
+
+
 class SequencingType(Enum):
     LOW_PASS = "low_pass"
     FULL_DEPTH = "full_depth"
@@ -789,8 +799,8 @@ class PreprocessedMetric:
     
     def matches_thresholds(self, name: str, minimum: float, maximum: float, threshold_type: ThresholdType) -> bool:
         return (self.name == name and
-                ((self.minimum == float(minimum)) if self.minimum is not None else (self.minimum is None and minimum is None)) and
-                ((self.maximum == float(maximum)) if self.maximum is not None else (self.maximum is None and maximum is None)) and
+                self.minimum == (None if minimum is None else float(minimum)) and
+                self.maximum == (None if maximum is None else float(maximum)) and
                 self.threshold_type == threshold_type)
     
     def to_dict(self) -> dict:

@@ -145,6 +145,11 @@ def _build_execution_plan(
     )
 
     for sample in samples:
+        # QC-ETL only provides library qualification and full-depth sequencing metrics. Other
+        # gates' metric values come from MISO sample fields
+        if sample.qcable_type not in (QcableType.LIBRARY_QUALIFICATION,
+                QcableType.FULL_DEPTH_SEQUENCING):
+            continue
         for metric in sample.metrics.values():
             definition = _find_metric_definition(metric.name, sample.library_design,
                     sample.qcable_type, metric_definitions)
